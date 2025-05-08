@@ -1,0 +1,11 @@
+{
+    "Title":"Soft Rasterizer",
+    "Description":"Gigi'fied version of the soft rasterizer sample from the slangtorch examples.",
+    "Author":"Randall Rauwendaal",
+    "Tags":"gradient-descent,automatic-differentiation,SLANG",
+    "Technique": "gigi-soft-rasterizer.gg",
+    "Website": "",
+    "Screenshot":"Screenshot.png",
+    "License":"LICENSE",
+    "GigiVersion":"0.991.0",
+}

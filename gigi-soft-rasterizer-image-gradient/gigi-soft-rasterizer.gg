@@ -1,0 +1,562 @@
+{
+    "$schema": "gigischema.json",
+    "name": "Soft Rasterizer",
+    "comment": "Gigi'fied version of the soft rasterizer sample from the slangtorch examples.\n\nDemonstrates the use of automatic differentiation and gradient descent to shift triangles vertices and color towards a target triangle.",
+    "version": "0.991b",
+    "variables": [
+        {
+            "name": "cameraPos",
+            "type": "Float2",
+            "dflt": "0.0f,0.0f",
+            "transient": true,
+            "UISettings": {
+                "UIHint": "Drag",
+                "min": "-1",
+                "max": "1",
+                "step": ".1"
+            }
+        },
+        {
+            "name": "scale",
+            "type": "Float2",
+            "dflt": "1.0,1.0",
+            "transient": true,
+            "UISettings": {
+                "UIHint": "Drag"
+            }
+        },
+        {
+            "name": "frameDim",
+            "type": "Float2",
+            "dflt": "1024,1024",
+            "transient": true,
+            "UISettings": {
+                "UIHint": "Drag"
+            }
+        },
+        {
+            "name": "color",
+            "type": "Float3",
+            "Static": true,
+            "dflt": "0.8, 0.3, 0.3",
+            "transient": true,
+            "UISettings": {
+                "UIHint": "Drag"
+            },
+            "UIGroup": "Input"
+        },
+        {
+            "name": "v0",
+            "comment": "Initial state of input vertex v0",
+            "type": "Float2",
+            "Static": true,
+            "dflt": "0.5, -0.5",
+            "transient": true,
+            "UISettings": {
+                "UIHint": "Drag",
+                "min": "-1",
+                "max": "1",
+                "step": ".01"
+            },
+            "UIGroup": "Input"
+        },
+        {
+            "name": "v1",
+            "comment": "Initial state of input vertex v1",
+            "type": "Float2",
+            "Static": true,
+            "dflt": "-0.5, 0.5",
+            "transient": true,
+            "UISettings": {
+                "UIHint": "Drag",
+                "min": "-1",
+                "max": "1",
+                "step": ".01"
+            },
+            "UIGroup": "Input"
+        },
+        {
+            "name": "v2",
+            "comment": "Initial state of input vertex v2",
+            "type": "Float2",
+            "Static": true,
+            "dflt": "-0.5, -0.5",
+            "transient": true,
+            "UISettings": {
+                "UIHint": "Drag",
+                "min": "-1",
+                "max": "1",
+                "step": ".01"
+            },
+            "UIGroup": "Input"
+        },
+        {
+            "name": "sigma",
+            "type": "Float",
+            "Static": true,
+            "dflt": "0.02",
+            "transient": true
+        },
+        {
+            "name": "target_v0",
+            "comment": "Target vertex v0",
+            "type": "Float2",
+            "Static": true,
+            "dflt": "0.7, -0.3",
+            "transient": true,
+            "UISettings": {
+                "UIHint": "Drag",
+                "min": "-1",
+                "max": "1",
+                "step": ".01"
+            },
+            "UIGroup": "Target"
+        },
+        {
+            "name": "target_v1",
+            "comment": "Target vertex v1",
+            "type": "Float2",
+            "Static": true,
+            "dflt": "-0.3, 0.2",
+            "transient": true,
+            "UISettings": {
+                "UIHint": "Drag",
+                "min": "-1",
+                "max": "1",
+                "step": ".01"
+            },
+            "UIGroup": "Target"
+        },
+        {
+            "name": "target_v2",
+            "comment": "Target vertex v2",
+            "type": "Float2",
+            "Static": true,
+            "dflt": "-0.6,-0.6",
+            "transient": true,
+            "UISettings": {
+                "UIHint": "Drag",
+                "min": "-1",
+                "max": "1",
+                "step": ".01"
+            },
+            "UIGroup": "Target"
+        },
+        {
+            "name": "targetColor",
+            "type": "Float3",
+            "Static": true,
+            "dflt": "0.3,0.8,0.3",
+            "transient": true,
+            "UISettings": {
+                "UIHint": "Drag"
+            },
+            "UIGroup": "Target"
+        },
+        {
+            "name": "learningRate",
+            "type": "Float",
+            "Static": true,
+            "dflt": "0.005",
+            "transient": true
+        },
+        {
+            "name": "beginDescent",
+            "type": "Bool",
+            "dflt": "False",
+            "visibility": "User",
+            "transient": true,
+            "UISettings": {
+                "UIHint": "Button"
+            }
+        },
+        {
+            "name": "FrameIndex",
+            "type": "Int",
+            "dflt": "0",
+            "visibility": "Host",
+            "transient": true
+        },
+        {
+            "name": "descendVertices",
+            "type": "Bool",
+            "dflt": "True",
+            "visibility": "User",
+            "transient": true
+        },
+        {
+            "name": "descendColor",
+            "type": "Bool",
+            "dflt": "False",
+            "visibility": "User",
+            "transient": true
+        }
+    ],
+    "shaders": [
+        {
+            "name": "fillBuffer",
+            "fileName": "shaders\\fillBuffer.slang",
+            "entryPoint": "fillBuffer",
+            "slangOptions": {
+                "process": true,
+                "optimizationLevel": "Maximum"
+            },
+            "resources": [
+                {
+                    "name": "vertices",
+                    "type": "Buffer",
+                    "access": "UAV",
+                    "buffer": {
+                        "type": "Float2",
+                        "PODAsStructuredBuffer": false
+                    }
+                },
+                {
+                    "name": "color",
+                    "type": "Buffer",
+                    "access": "UAV",
+                    "buffer": {
+                        "type": "Float3",
+                        "PODAsStructuredBuffer": false
+                    }
+                }
+            ]
+        },
+        {
+            "name": "softRasterizer2d",
+            "fileName": "shaders\\soft-rasterizer2d.slang",
+            "entryPoint": "rasterize",
+            "slangOptions": {
+                "process": true,
+                "optimizationLevel": "Maximum"
+            },
+            "resources": [
+                {
+                    "name": "inputVertices",
+                    "type": "Buffer",
+                    "access": "SRV",
+                    "buffer": {
+                        "type": "Float2",
+                        "PODAsStructuredBuffer": false
+                    }
+                },
+                {
+                    "name": "inputColor",
+                    "type": "Buffer",
+                    "access": "SRV",
+                    "buffer": {
+                        "type": "Float3",
+                        "PODAsStructuredBuffer": false
+                    }
+                },
+                {
+                    "name": "targetVertices",
+                    "type": "Buffer",
+                    "access": "SRV",
+                    "buffer": {
+                        "type": "Float2",
+                        "PODAsStructuredBuffer": false
+                    }
+                },
+                {
+                    "name": "output",
+                    "type": "Texture",
+                    "access": "UAV"
+                }
+            ]
+        },
+        {
+            "name": "fillTargetBuffer",
+            "fileName": "shaders\\fillTargetBuffer.slang",
+            "entryPoint": "fillBuffer",
+            "slangOptions": {
+                "process": true,
+                "optimizationLevel": "Maximum"
+            },
+            "resources": [
+                {
+                    "name": "vertices",
+                    "type": "Buffer",
+                    "access": "UAV",
+                    "buffer": {
+                        "type": "Float2",
+                        "PODAsStructuredBuffer": false
+                    }
+                }
+            ]
+        },
+        {
+            "name": "gradientDescendImage",
+            "fileName": "shaders\\gradientDescendImage.slang",
+            "entryPoint": "gradientDescent",
+            "slangOptions": {
+                "process": true,
+                "optimizationLevel": "Maximum"
+            },
+            "resources": [
+                {
+                    "name": "inputVertices",
+                    "type": "Buffer",
+                    "access": "UAV",
+                    "buffer": {
+                        "type": "Float2",
+                        "PODAsStructuredBuffer": false
+                    }
+                },
+                {
+                    "name": "inputColor",
+                    "type": "Buffer",
+                    "access": "UAV",
+                    "buffer": {
+                        "type": "Float3",
+                        "PODAsStructuredBuffer": false
+                    }
+                },
+                {
+                    "name": "targetVertices",
+                    "type": "Buffer",
+                    "access": "SRV",
+                    "buffer": {
+                        "type": "Float2",
+                        "PODAsStructuredBuffer": false
+                    }
+                }
+            ]
+        }
+    ],
+    "nodes": [
+        {
+            "resourceTexture": {
+                "name": "output",
+                "editorPos": [
+                    107.0,
+                    98.0
+                ],
+                "transient": false,
+                "format": {
+                    "format": "RGBA16_Float"
+                },
+                "size": {
+                    "variable": {
+                        "name": "frameDim"
+                    }
+                }
+            }
+        },
+        {
+            "resourceBuffer": {
+                "name": "vertices",
+                "comment": "Buffer for the input vertices",
+                "editorPos": [
+                    -469.0,
+                    -126.0
+                ],
+                "transient": false,
+                "format": {
+                    "type": "Float2"
+                },
+                "count": {
+                    "multiply": 3
+                }
+            }
+        },
+        {
+            "actionComputeShader": {
+                "name": "fillBuffer",
+                "editorPos": [
+                    -315.0,
+                    -113.0
+                ],
+                "condition": {
+                    "variable1": "beginDescent",
+                    "comparison": "IsTrue"
+                },
+                "linkProperties": [
+                    {},
+                    {},
+                    {}
+                ],
+                "connections": [
+                    {
+                        "srcPin": "vertices",
+                        "dstNode": "vertices",
+                        "dstPin": "resource"
+                    },
+                    {
+                        "srcPin": "color",
+                        "dstNode": "color",
+                        "dstPin": "resource"
+                    }
+                ],
+                "shader": {
+                    "name": "fillBuffer"
+                },
+                "dispatchSize": {
+                    "indirectBuffer": {
+                        "node": "vertices"
+                    },
+                    "multiply": [
+                        3,
+                        1,
+                        1
+                    ]
+                }
+            }
+        },
+        {
+            "actionComputeShader": {
+                "name": "gradientDescendImage",
+                "editorPos": [
+                    75.0,
+                    -81.0
+                ],
+                "linkProperties": [
+                    {},
+                    {},
+                    {},
+                    {}
+                ],
+                "connections": [
+                    {
+                        "srcPin": "inputVertices",
+                        "dstNode": "fillBuffer",
+                        "dstPin": "vertices"
+                    },
+                    {
+                        "srcPin": "inputColor",
+                        "dstNode": "fillBuffer",
+                        "dstPin": "color"
+                    },
+                    {
+                        "srcPin": "targetVertices",
+                        "dstNode": "fillTargetBuffer",
+                        "dstPin": "vertices"
+                    }
+                ],
+                "shader": {
+                    "name": "gradientDescendImage"
+                },
+                "dispatchSize": {
+                    "variable": {
+                        "name": "frameDim"
+                    },
+                    "indirectBuffer": {
+                        "node": "vertices"
+                    }
+                }
+            }
+        },
+        {
+            "actionComputeShader": {
+                "name": "fillTargetBuffer",
+                "editorPos": [
+                    -309.0,
+                    159.0
+                ],
+                "linkProperties": [
+                    {},
+                    {}
+                ],
+                "connections": [
+                    {
+                        "srcPin": "vertices",
+                        "dstNode": "targetVertices",
+                        "dstPin": "resource"
+                    }
+                ],
+                "shader": {
+                    "name": "fillTargetBuffer"
+                },
+                "dispatchSize": {
+                    "indirectBuffer": {
+                        "node": "vertices"
+                    },
+                    "multiply": [
+                        3,
+                        1,
+                        1
+                    ]
+                }
+            }
+        },
+        {
+            "resourceBuffer": {
+                "name": "targetVertices",
+                "editorPos": [
+                    -481.0,
+                    162.0
+                ],
+                "transient": false,
+                "format": {
+                    "type": "Float2"
+                },
+                "count": {
+                    "multiply": 3
+                }
+            }
+        },
+        {
+            "actionComputeShader": {
+                "name": "displayOutput",
+                "editorPos": [
+                    331.0,
+                    -78.0
+                ],
+                "linkProperties": [
+                    {},
+                    {},
+                    {},
+                    {},
+                    {}
+                ],
+                "connections": [
+                    {
+                        "srcPin": "inputVertices",
+                        "dstNode": "gradientDescendImage",
+                        "dstPin": "inputVertices"
+                    },
+                    {
+                        "srcPin": "inputColor",
+                        "dstNode": "gradientDescendImage",
+                        "dstPin": "inputColor"
+                    },
+                    {
+                        "srcPin": "targetVertices",
+                        "dstNode": "gradientDescendImage",
+                        "dstPin": "targetVertices"
+                    },
+                    {
+                        "srcPin": "output",
+                        "dstNode": "output",
+                        "dstPin": "resource"
+                    }
+                ],
+                "shader": {
+                    "name": "softRasterizer2d"
+                },
+                "dispatchSize": {
+                    "variable": {
+                        "name": "frameDim"
+                    }
+                }
+            }
+        },
+        {
+            "resourceBuffer": {
+                "name": "color",
+                "comment": "Buffer for the input color",
+                "editorPos": [
+                    -469.0,
+                    -78.0
+                ],
+                "transient": false,
+                "format": {
+                    "type": "Float4"
+                }
+            }
+        }
+    ],
+    "PrimaryOutput": {
+        "name": "output"
+    }
+}
