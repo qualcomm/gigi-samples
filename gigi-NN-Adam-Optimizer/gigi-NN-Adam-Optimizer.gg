@@ -1,0 +1,970 @@
+{
+    "$schema": "gigischema.json",
+    "name": "NN-Adam-Optimizer",
+    "comment": "Port of the Dx12NN by Jakub Boksansky to Gigi.\n\nSee https://github.com/boksajak/Dx12NN for the original implementation.\nSee https://boksajak.github.io/blog/DeepLearning for a write up on the implementation",
+    "version": "0.991b",
+    "variables": [
+        {
+            "name": "mLearningRate",
+            "type": "Float",
+            "dflt": "0.001",
+            "visibility": "User",
+            "transient": true,
+            "UISettings": {
+                "UIHint": "Slider",
+                "min": "0.001",
+                "max": "0.01",
+                "step": "0.001"
+            }
+        },
+        {
+            "name": "mBatchSize",
+            "type": "Int",
+            "dflt": "2048",
+            "visibility": "User"
+        },
+        {
+            "name": "frameNumber",
+            "type": "Int",
+            "dflt": "0",
+            "visibility": "User",
+            "transient": true
+        },
+        {
+            "name": "frameWidth",
+            "type": "Uint",
+            "Const": true,
+            "dflt": "512",
+            "UISettings": {
+                "UIHint": "Slider"
+            }
+        },
+        {
+            "name": "frameHeight",
+            "type": "Uint",
+            "Const": true,
+            "dflt": "512",
+            "UISettings": {
+                "UIHint": "Slider"
+            }
+        },
+        {
+            "name": "frameDim",
+            "type": "Uint2",
+            "Const": true,
+            "dflt": "512,512"
+        },
+        {
+            "name": "adamBeta1",
+            "type": "Float",
+            "dflt": "0.9",
+            "visibility": "User",
+            "transient": true,
+            "UISettings": {
+                "UIHint": "Slider",
+                "max": "0.999"
+            }
+        },
+        {
+            "name": "adamBeta2",
+            "type": "Float",
+            "dflt": "0.999",
+            "visibility": "User",
+            "transient": true,
+            "UISettings": {
+                "UIHint": "Slider",
+                "max": "0.999"
+            }
+        },
+        {
+            "name": "Begin Training",
+            "type": "Bool",
+            "dflt": "True",
+            "visibility": "User",
+            "UISettings": {
+                "UIHint": "Button"
+            }
+        },
+        {
+            "name": "NEURONS_PER_LAYER_0",
+            "type": "Uint",
+            "Const": true,
+            "dflt": "32"
+        },
+        {
+            "name": "NEURONS_PER_LAYER_1",
+            "type": "Uint",
+            "Const": true,
+            "dflt": "64"
+        },
+        {
+            "name": "NEURONS_PER_LAYER_2",
+            "type": "Uint",
+            "Const": true,
+            "dflt": "64"
+        },
+        {
+            "name": "NEURONS_PER_LAYER_3",
+            "type": "Uint",
+            "Const": true,
+            "dflt": "3"
+        },
+        {
+            "name": "NEURONS_PER_LAYER_4",
+            "type": "Uint",
+            "Const": true,
+            "dflt": "0"
+        }
+    ],
+    "shaders": [
+        {
+            "name": "Initialize",
+            "fileName": "shaders\\initialize.slang",
+            "entryPoint": "Initialize",
+            "defines": [
+                {
+                    "name": "MAX_LAYERS",
+                    "value": "5"
+                }
+            ],
+            "NumThreads": [
+                16,
+                16,
+                1
+            ],
+            "slangOptions": {
+                "process": true
+            },
+            "resources": [
+                {
+                    "name": "adamBiasesMeans",
+                    "type": "Buffer",
+                    "access": "UAV",
+                    "buffer": {
+                        "type": "Float"
+                    }
+                },
+                {
+                    "name": "adamBiasesVariances",
+                    "type": "Buffer",
+                    "access": "UAV",
+                    "buffer": {
+                        "type": "Float"
+                    }
+                },
+                {
+                    "name": "adamWeightsMeans",
+                    "type": "Buffer",
+                    "access": "UAV",
+                    "buffer": {
+                        "type": "Float"
+                    }
+                },
+                {
+                    "name": "adamWeightsVariances",
+                    "type": "Buffer",
+                    "access": "UAV",
+                    "buffer": {
+                        "type": "Float"
+                    }
+                },
+                {
+                    "name": "nnWeights",
+                    "type": "Buffer",
+                    "access": "UAV",
+                    "buffer": {
+                        "type": "Float",
+                        "PODAsStructuredBuffer": false
+                    }
+                },
+                {
+                    "name": "nnBiases",
+                    "type": "Buffer",
+                    "access": "UAV",
+                    "buffer": {
+                        "type": "Float",
+                        "PODAsStructuredBuffer": false
+                    }
+                }
+            ]
+        },
+        {
+            "name": "ClearGradients",
+            "fileName": "shaders\\clearGradients.slang",
+            "entryPoint": "ClearGradients",
+            "NumThreads": [
+                16,
+                16,
+                1
+            ],
+            "slangOptions": {
+                "process": true
+            },
+            "resources": [
+                {
+                    "name": "gradientWeights",
+                    "type": "Buffer",
+                    "access": "UAV",
+                    "buffer": {
+                        "type": "Int",
+                        "PODAsStructuredBuffer": false
+                    },
+                    "texture": {
+                        "viewType": "Int"
+                    }
+                },
+                {
+                    "name": "gradientBiases",
+                    "type": "Buffer",
+                    "access": "UAV",
+                    "buffer": {
+                        "type": "Int",
+                        "PODAsStructuredBuffer": false
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Training",
+            "fileName": "shaders\\training.slang",
+            "entryPoint": "Training",
+            "NumThreads": [
+                8,
+                1,
+                1
+            ],
+            "slangOptions": {
+                "process": true
+            },
+            "resources": [
+                {
+                    "name": "nnWeights",
+                    "type": "Buffer",
+                    "access": "UAV",
+                    "buffer": {
+                        "type": "Float",
+                        "PODAsStructuredBuffer": false
+                    }
+                },
+                {
+                    "name": "nnBiases",
+                    "type": "Buffer",
+                    "access": "UAV",
+                    "buffer": {
+                        "type": "Float",
+                        "PODAsStructuredBuffer": false
+                    }
+                },
+                {
+                    "name": "gradientWeights",
+                    "type": "Buffer",
+                    "access": "UAV",
+                    "buffer": {
+                        "type": "Int",
+                        "PODAsStructuredBuffer": false
+                    }
+                },
+                {
+                    "name": "gradientBiases",
+                    "type": "Buffer",
+                    "access": "UAV",
+                    "buffer": {
+                        "type": "Int",
+                        "PODAsStructuredBuffer": false
+                    },
+                    "texture": {
+                        "viewType": "Int"
+                    }
+                },
+                {
+                    "name": "targetTexture",
+                    "type": "Texture",
+                    "access": "SRV",
+                    "buffer": {
+                        "PODAsStructuredBuffer": false
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Optimize",
+            "fileName": "shaders\\optimize.slang",
+            "entryPoint": "Optimize",
+            "NumThreads": [
+                16,
+                16,
+                1
+            ],
+            "slangOptions": {
+                "process": true
+            },
+            "resources": [
+                {
+                    "name": "adamBiasesMeans",
+                    "type": "Buffer",
+                    "access": "UAV",
+                    "buffer": {
+                        "type": "Float",
+                        "PODAsStructuredBuffer": false
+                    }
+                },
+                {
+                    "name": "adamBiasesVariances",
+                    "type": "Buffer",
+                    "access": "UAV",
+                    "buffer": {
+                        "type": "Float",
+                        "PODAsStructuredBuffer": false
+                    }
+                },
+                {
+                    "name": "adamWeightsMeans",
+                    "type": "Buffer",
+                    "access": "UAV",
+                    "buffer": {
+                        "type": "Float",
+                        "PODAsStructuredBuffer": false
+                    }
+                },
+                {
+                    "name": "adamWeightsVariances",
+                    "type": "Buffer",
+                    "access": "UAV",
+                    "buffer": {
+                        "type": "Float",
+                        "PODAsStructuredBuffer": false
+                    }
+                },
+                {
+                    "name": "nnWeights",
+                    "type": "Buffer",
+                    "access": "UAV",
+                    "buffer": {
+                        "type": "Float",
+                        "PODAsStructuredBuffer": false
+                    }
+                },
+                {
+                    "name": "nnBiases",
+                    "type": "Buffer",
+                    "access": "UAV",
+                    "buffer": {
+                        "type": "Float",
+                        "PODAsStructuredBuffer": false
+                    }
+                },
+                {
+                    "name": "gradientWeights",
+                    "type": "Buffer",
+                    "access": "UAV",
+                    "buffer": {
+                        "type": "Int",
+                        "PODAsStructuredBuffer": false
+                    }
+                },
+                {
+                    "name": "gradientBiases",
+                    "type": "Buffer",
+                    "access": "UAV",
+                    "buffer": {
+                        "type": "Int",
+                        "PODAsStructuredBuffer": false
+                    },
+                    "texture": {
+                        "viewType": "Int"
+                    }
+                },
+                {
+                    "name": "nnData",
+                    "type": "Buffer",
+                    "access": "SRV",
+                    "buffer": {
+                        "typeStruct": {
+                            "name": "nnData"
+                        },
+                        "PODAsStructuredBuffer": false
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Inference",
+            "fileName": "shaders\\inference.slang",
+            "entryPoint": "Inference",
+            "slangOptions": {
+                "process": true
+            },
+            "resources": [
+                {
+                    "name": "nnWeights",
+                    "type": "Buffer",
+                    "access": "UAV",
+                    "buffer": {
+                        "type": "Float",
+                        "PODAsStructuredBuffer": false
+                    }
+                },
+                {
+                    "name": "nnBiases",
+                    "type": "Buffer",
+                    "access": "UAV",
+                    "buffer": {
+                        "type": "Float",
+                        "PODAsStructuredBuffer": false
+                    }
+                },
+                {
+                    "name": "Output",
+                    "type": "Texture",
+                    "access": "UAV"
+                }
+            ]
+        },
+        {
+            "name": "ComputeAdamBetaT",
+            "fileName": "shaders\\computeAdamBetaT.slang",
+            "entryPoint": "ComputeAdamBeta",
+            "slangOptions": {
+                "process": true
+            },
+            "resources": [
+                {
+                    "name": "nnData",
+                    "type": "Buffer",
+                    "access": "UAV",
+                    "buffer": {
+                        "typeStruct": {
+                            "name": "nnData"
+                        },
+                        "PODAsStructuredBuffer": false
+                    }
+                }
+            ]
+        }
+    ],
+    "structs": [
+        {
+            "name": "nnData",
+            "fields": [
+                {
+                    "name": "adamBeta1T",
+                    "type": "Float"
+                },
+                {
+                    "name": "adamBeta2T",
+                    "type": "Float"
+                }
+            ]
+        }
+    ],
+    "fileCopies": [
+        {
+            "fileName": "shaders\\shared.slang",
+            "type": "Shader",
+            "destFileName": "shared.slang"
+        }
+    ],
+    "nodes": [
+        {
+            "resourceBuffer": {
+                "name": "nnWeights",
+                "editorPos": [
+                    -863.0,
+                    -270.0
+                ],
+                "transient": false,
+                "format": {
+                    "type": "Float"
+                },
+                "count": {
+                    "multiply": 16384
+                }
+            }
+        },
+        {
+            "resourceBuffer": {
+                "name": "nnBiases",
+                "editorPos": [
+                    -863.0,
+                    -222.0
+                ],
+                "transient": false,
+                "format": {
+                    "type": "Float"
+                },
+                "count": {
+                    "multiply": 256
+                }
+            }
+        },
+        {
+            "resourceBuffer": {
+                "name": "gradientWeights",
+                "editorPos": [
+                    -894.0,
+                    -142.0
+                ],
+                "format": {
+                    "type": "Int"
+                },
+                "count": {
+                    "multiply": 16384
+                }
+            }
+        },
+        {
+            "resourceBuffer": {
+                "name": "gradientBiases",
+                "editorPos": [
+                    -887.0,
+                    -94.0
+                ],
+                "format": {
+                    "type": "Int"
+                },
+                "count": {
+                    "multiply": 256
+                }
+            }
+        },
+        {
+            "actionComputeShader": {
+                "name": "Initialize",
+                "editorPos": [
+                    -678.0,
+                    -420.0
+                ],
+                "condition": {
+                    "variable1": "Begin Training",
+                    "comparison": "IsTrue"
+                },
+                "linkProperties": [
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
+                    {}
+                ],
+                "connections": [
+                    {
+                        "srcPin": "adamBiasesMeans",
+                        "dstNode": "adamBiasesMeans",
+                        "dstPin": "resource"
+                    },
+                    {
+                        "srcPin": "adamBiasesVariances",
+                        "dstNode": "AdamBiasesVariances",
+                        "dstPin": "resource"
+                    },
+                    {
+                        "srcPin": "adamWeightsMeans",
+                        "dstNode": "adamWeightsMeans",
+                        "dstPin": "resource"
+                    },
+                    {
+                        "srcPin": "adamWeightsVariances",
+                        "dstNode": "adamWeightsVariances",
+                        "dstPin": "resource"
+                    },
+                    {
+                        "srcPin": "nnWeights",
+                        "dstNode": "nnWeights",
+                        "dstPin": "resource"
+                    },
+                    {
+                        "srcPin": "nnBiases",
+                        "dstNode": "nnBiases",
+                        "dstPin": "resource"
+                    }
+                ],
+                "shader": {
+                    "name": "Initialize"
+                },
+                "dispatchSize": {
+                    "multiply": [
+                        16,
+                        64,
+                        1
+                    ]
+                },
+                "entryPoint": "Initialize"
+            }
+        },
+        {
+            "actionComputeShader": {
+                "name": "ClearGradients",
+                "editorPos": [
+                    -699.0,
+                    -164.0
+                ],
+                "linkProperties": [
+                    {},
+                    {},
+                    {}
+                ],
+                "connections": [
+                    {
+                        "srcPin": "gradientWeights",
+                        "dstNode": "gradientWeights",
+                        "dstPin": "resource"
+                    },
+                    {
+                        "srcPin": "gradientBiases",
+                        "dstNode": "gradientBiases",
+                        "dstPin": "resource"
+                    }
+                ],
+                "shader": {
+                    "name": "ClearGradients"
+                },
+                "dispatchSize": {
+                    "multiply": [
+                        16,
+                        64,
+                        1
+                    ]
+                },
+                "entryPoint": "ClearGradients"
+            }
+        },
+        {
+            "actionComputeShader": {
+                "name": "Training  ",
+                "editorPos": [
+                    -285.0,
+                    -209.0
+                ],
+                "linkProperties": [
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
+                    {}
+                ],
+                "connections": [
+                    {
+                        "srcPin": "nnWeights",
+                        "dstNode": "Initialize",
+                        "dstPin": "nnWeights"
+                    },
+                    {
+                        "srcPin": "nnBiases",
+                        "dstNode": "Initialize",
+                        "dstPin": "nnBiases"
+                    },
+                    {
+                        "srcPin": "gradientWeights",
+                        "dstNode": "ClearGradients",
+                        "dstPin": "gradientWeights"
+                    },
+                    {
+                        "srcPin": "gradientBiases",
+                        "dstNode": "ClearGradients",
+                        "dstPin": "gradientBiases"
+                    },
+                    {
+                        "srcPin": "targetTexture",
+                        "dstNode": "targetTexture",
+                        "dstPin": "resource"
+                    }
+                ],
+                "shader": {
+                    "name": "Training"
+                },
+                "dispatchSize": {
+                    "multiply": [
+                        2048,
+                        1,
+                        1
+                    ]
+                },
+                "entryPoint": "Training",
+                "defines": [
+                    {
+                        "name": "USE_ADAM_OPTIMIZER"
+                    }
+                ]
+            }
+        },
+        {
+            "actionComputeShader": {
+                "name": "Optimize ",
+                "editorPos": [
+                    197.0,
+                    -327.0
+                ],
+                "linkProperties": [
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
+                    {}
+                ],
+                "connections": [
+                    {
+                        "srcPin": "adamBiasesMeans",
+                        "dstNode": "Initialize",
+                        "dstPin": "adamBiasesMeans"
+                    },
+                    {
+                        "srcPin": "adamBiasesVariances",
+                        "dstNode": "Initialize",
+                        "dstPin": "adamBiasesVariances"
+                    },
+                    {
+                        "srcPin": "adamWeightsMeans",
+                        "dstNode": "Initialize",
+                        "dstPin": "adamWeightsMeans"
+                    },
+                    {
+                        "srcPin": "adamWeightsVariances",
+                        "dstNode": "Initialize",
+                        "dstPin": "adamWeightsVariances"
+                    },
+                    {
+                        "srcPin": "nnWeights",
+                        "dstNode": "Training  ",
+                        "dstPin": "nnWeights"
+                    },
+                    {
+                        "srcPin": "nnBiases",
+                        "dstNode": "Training  ",
+                        "dstPin": "nnBiases"
+                    },
+                    {
+                        "srcPin": "gradientWeights",
+                        "dstNode": "Training  ",
+                        "dstPin": "gradientWeights"
+                    },
+                    {
+                        "srcPin": "gradientBiases",
+                        "dstNode": "Training  ",
+                        "dstPin": "gradientBiases"
+                    },
+                    {
+                        "srcPin": "nnData",
+                        "dstNode": "ComputeAdamBetaT",
+                        "dstPin": "nnData"
+                    }
+                ],
+                "shader": {
+                    "name": "Optimize"
+                },
+                "dispatchSize": {
+                    "multiply": [
+                        16,
+                        64,
+                        1
+                    ]
+                },
+                "defines": [
+                    {
+                        "name": "USE_ADAM_OPTIMIZER"
+                    },
+                    {
+                        "name": "USE_SGD_OPTIMIZER",
+                        "value": "FALSE"
+                    }
+                ]
+            }
+        },
+        {
+            "resourceTexture": {
+                "name": "targetTexture",
+                "editorPos": [
+                    -489.0,
+                    -14.0
+                ],
+                "transient": false,
+                "visibility": "Imported",
+                "format": {
+                    "format": "RGBA8_Unorm"
+                }
+            }
+        },
+        {
+            "actionComputeShader": {
+                "name": "Inference",
+                "editorPos": [
+                    549.0,
+                    -199.0
+                ],
+                "linkProperties": [
+                    {},
+                    {},
+                    {},
+                    {}
+                ],
+                "connections": [
+                    {
+                        "srcPin": "nnWeights",
+                        "dstNode": "Optimize ",
+                        "dstPin": "nnWeights"
+                    },
+                    {
+                        "srcPin": "nnBiases",
+                        "dstNode": "Optimize ",
+                        "dstPin": "nnBiases"
+                    },
+                    {
+                        "srcPin": "Output",
+                        "dstNode": "Output",
+                        "dstPin": "resource"
+                    }
+                ],
+                "shader": {
+                    "name": "Inference"
+                },
+                "dispatchSize": {
+                    "multiply": [
+                        512,
+                        512,
+                        1
+                    ]
+                }
+            }
+        },
+        {
+            "resourceTexture": {
+                "name": "Output",
+                "editorPos": [
+                    283.0,
+                    2.0
+                ],
+                "transient": false,
+                "format": {
+                    "format": "RGBA8_Unorm"
+                },
+                "size": {
+                    "variable": {
+                        "name": "frameDim"
+                    }
+                }
+            }
+        },
+        {
+            "resourceBuffer": {
+                "name": "adamWeightsMeans",
+                "editorPos": [
+                    -901.0,
+                    -430.0
+                ],
+                "transient": false,
+                "format": {
+                    "type": "Float"
+                }
+            }
+        },
+        {
+            "resourceBuffer": {
+                "name": "AdamBiasesVariances",
+                "editorPos": [
+                    -912.0,
+                    -478.0
+                ],
+                "transient": false,
+                "format": {
+                    "type": "Float"
+                }
+            }
+        },
+        {
+            "resourceBuffer": {
+                "name": "adamBiasesMeans",
+                "editorPos": [
+                    -894.0,
+                    -526.0
+                ],
+                "transient": false,
+                "format": {
+                    "type": "Float"
+                }
+            }
+        },
+        {
+            "resourceBuffer": {
+                "name": "adamWeightsVariances",
+                "editorPos": [
+                    -919.0,
+                    -382.0
+                ],
+                "transient": false,
+                "format": {
+                    "type": "Float"
+                }
+            }
+        },
+        {
+            "actionComputeShader": {
+                "name": "ComputeAdamBetaT",
+                "editorPos": [
+                    -283.0,
+                    98.0
+                ],
+                "linkProperties": [
+                    {},
+                    {}
+                ],
+                "connections": [
+                    {
+                        "srcPin": "nnData",
+                        "dstNode": "AdamBetaBuffer",
+                        "dstPin": "resource"
+                    }
+                ],
+                "shader": {
+                    "name": "ComputeAdamBetaT"
+                },
+                "entryPoint": "ComputeAdamBeta"
+            }
+        },
+        {
+            "resourceBuffer": {
+                "name": "AdamBetaBuffer",
+                "editorPos": [
+                    -501.0,
+                    130.0
+                ],
+                "transient": false,
+                "format": {
+                    "structureType": {
+                        "name": "nnData"
+                    }
+                }
+            }
+        }
+    ],
+    "setVars": [
+        {
+            "destination": {
+                "name": "frameNumber"
+            },
+            "AVar": {
+                "name": "frameNumber"
+            },
+            "BLiteral": "1",
+            "condition": {
+                "comparison": "IsTrue"
+            }
+        },
+        {
+            "destination": {
+                "name": "frameNumber"
+            },
+            "ALiteral": "0",
+            "BLiteral": "0",
+            "condition": {
+                "variable1": "Begin Training",
+                "comparison": "IsTrue"
+            }
+        }
+    ]
+}

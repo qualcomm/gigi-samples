@@ -1,0 +1,11 @@
+{
+    "Title":"NN Adam Optimizer",
+    "Description":"Port of Dx12NN (neural network on the GPU) by Jakub Boksansky to Gigi. See https://github.com/boksajak/Dx12NN for the original implementation. See https://boksajak.github.io/blog/DeepLearning for a write up on the original implementation",
+    "Author":"Randall Rauwendaal",
+    "Tags":"ML,training,inference",
+    "Technique": "gigi-NN-Adam-Optimizer.gg",
+    "Website": "",
+    "Screenshot":"Screenshot.png",
+    "License":"LICENSE",
+    "GigiVersion":"0.991.0",
+}
