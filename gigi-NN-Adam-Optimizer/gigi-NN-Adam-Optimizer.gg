@@ -2,7 +2,7 @@
     "$schema": "gigischema.json",
     "name": "NN-Adam-Optimizer",
     "comment": "Port of the Dx12NN by Jakub Boksansky to Gigi.\n\nSee https://github.com/boksajak/Dx12NN for the original implementation.\nSee https://boksajak.github.io/blog/DeepLearning for a write up on the implementation",
-    "version": "0.991b",
+    "version": "1.0",
     "variables": [
         {
             "name": "mLearningRate",
@@ -120,6 +120,7 @@
         {
             "name": "Initialize",
             "fileName": "shaders\\initialize.slang",
+            "language": "Slang",
             "entryPoint": "Initialize",
             "defines": [
                 {
@@ -191,6 +192,7 @@
         {
             "name": "ClearGradients",
             "fileName": "shaders\\clearGradients.slang",
+            "language": "Slang",
             "entryPoint": "ClearGradients",
             "NumThreads": [
                 16,
@@ -227,6 +229,7 @@
         {
             "name": "Training",
             "fileName": "shaders\\training.slang",
+            "language": "Slang",
             "entryPoint": "Training",
             "NumThreads": [
                 8,
@@ -289,6 +292,7 @@
         {
             "name": "Optimize",
             "fileName": "shaders\\optimize.slang",
+            "language": "Slang",
             "entryPoint": "Optimize",
             "NumThreads": [
                 16,
@@ -390,6 +394,7 @@
         {
             "name": "Inference",
             "fileName": "shaders\\inference.slang",
+            "language": "Slang",
             "entryPoint": "Inference",
             "slangOptions": {
                 "process": true
@@ -423,6 +428,7 @@
         {
             "name": "ComputeAdamBetaT",
             "fileName": "shaders\\computeAdamBetaT.slang",
+            "language": "Slang",
             "entryPoint": "ComputeAdamBeta",
             "slangOptions": {
                 "process": true
@@ -460,8 +466,7 @@
     "fileCopies": [
         {
             "fileName": "shaders\\shared.slang",
-            "type": "Shader",
-            "destFileName": "shared.slang"
+            "type": "Shader"
         }
     ],
     "nodes": [
